@@ -8,13 +8,13 @@ import time
 MASTER_PORT = 8060
 WORKER_PORT = 3061
 
-BROADCAST_TIMEOUT = 1
-BROADCAST_INTERVAL = 0.1
 BROADCAST_IP = "127.0.0.1"
 BROADCAST_MSG = "Broadcast"
+REGISTER_TIMEOUT = 2
 REGISTER_MSG = "Register"
+CONFIRMATION_MSG = "Confirmation"
 
-WORKER_TIMEOUT = BROADCAST_TIMEOUT + 1
+DATA_TIMEOUT = 2
 
 MAP_PREFIX = "MAP_PREFIX"
 WORKERS_PREFIX = "WORKERS_PREFIX"
@@ -32,60 +32,62 @@ class Master:
     self.sock = Socket(gethostbyname(gethostname()), MASTER_PORT)
     print self.sock.getsockname()
 
-    broadcast_thread = threading.Thread(target=self.Broadcast)
-    broadcast_thread.start()
-    self.workers = []
+    # Discover all Workers.
+    self.sock.sendto(BROADCAST_MSG, (BROADCAST_IP, WORKER_PORT))
+    self.workers = set() # Allow no duplicates.
     self.RegisterWorkers()
-    broadcast_thread.join()
-
     print str(len(self.workers)), "workers found."
 
-    # Send map function.
+    # Read in data to send to Workers.
     with open(map_path, "r") as f:
       map_f = f.read()
+
+    # Send all data to Workers.
     for worker in self.workers:
       self.sock.sendto(MAP_PREFIX + map_f, worker)
-      self.sock.sendto(WORKERS_PREFIX + json.dumps(self.workers), worker)
+      self.sock.sendto(WORKERS_PREFIX + json.dumps(list(self.workers)), worker)
+
+    # Wait for all workers to finish.
+
+    # Signal all workers to start Reduce.
 
   def RegisterWorkers(self):
-    read, _, _ = select.select([self.sock], [], [], BROADCAST_TIMEOUT)
+    read, _, _ = select.select([self.sock], [], [], REGISTER_TIMEOUT)
     for sock in read:
       data, addr = sock.recvfrom(1024)
       if data == REGISTER_MSG:
-        print "Found one worker at", addr
-        self.workers.append(addr)
-
-  def Broadcast(self):
-    time_expired = 0
-    while time_expired < BROADCAST_TIMEOUT:
-      self.sock.sendto(BROADCAST_MSG, (BROADCAST_IP, WORKER_PORT))
-      print "Broadcasting..."
-      time.sleep(BROADCAST_INTERVAL)
-      time_expired += BROADCAST_INTERVAL
+        print "Found worker at", addr
+        self.workers.add(addr)
+        self.sock.sendto(CONFIRMATION_MSG, addr)
 
 class Worker:
 
   def __init__(self):
     self.sock = Socket(BROADCAST_IP, WORKER_PORT)
-    print "Waiting for broadcast from Master"
+    print "Waiting for broadcast from Master."
     self.Register()
-    print "Found Master at", self.master
+    self.map_f = None
+    self.workers = None
     self.ReceiveData()
-    print "Received data"
-    print "map_f", self.map_f
-    print "workers", self.workers
+    print "workers:", self.workers
+    print "len(map_f):", len(self.map_f)
 
   def Register(self):
-    while True:
+    registered = False
+    while not registered:
       data, addr = self.sock.recvfrom(1024)
       if data == BROADCAST_MSG:
+        print "Registering with master at", addr
         self.master = addr
-        break
-    self.sock.sendto(REGISTER_MSG, self.master)
+        self.sock.sendto(REGISTER_MSG, self.master)
+        sent = True
+      elif data == CONFIRMATION_MSG:
+        print "Registration complete"
+        registered = True
 
   def ReceiveData(self):
     start_time = time.time()
-    while time.time() < start_time + WORKER_TIMEOUT:
+    while time.time() < start_time + DATA_TIMEOUT and not all([self.workers, self.map_f]):
       read, _, _ = select.select([self.sock], [], [], 0.1)
       for sock in read:
         data, addr = sock.recvfrom(65535)
@@ -96,12 +98,12 @@ class Worker:
 
 if __name__ == "__main__":
   if len(sys.argv) <= 1:
-    print "Not enough arguments"
+    print "Not enough arguments."
   elif sys.argv[1].lower() == "master":
-    print "Running as Master"
+    print "Running as Master."
     Master(sys.argv[2])
   elif sys.argv[1].lower() == "worker":
-    print "Running as Worker"
+    print "Running as Worker."
     Worker()
   else:
-    print "Ambiguous"
+    print "Invalid options."
