@@ -26,6 +26,7 @@ def Socket(host, port):
   sock.bind((host, port))
   return sock
 
+
 class Master:
 
   def __init__(self, map_path):
@@ -62,13 +63,16 @@ class Master:
           self.workers.add(addr)
           self.sock.sendto(CONFIRMATION_MSG, addr)
 
-
 class Worker:
 
   def __init__(self):
     self.sock = Socket(BROADCAST_IP, WORKER_PORT)
     print "Waiting for broadcast from Master."
+
+    # Contact Master and receive confirmation.
     self.Register()
+
+    # Receive all needed data from Master.
     self.map_f = None
     self.workers = None
     self.ReceiveData()
@@ -90,6 +94,7 @@ class Worker:
 
   def ReceiveData(self):
     start_time = time.time()
+    # Until all data received or timed-out.
     while time.time() < start_time + DATA_TIMEOUT and not all([self.workers, self.map_f]):
       read, _, _ = select.select([self.sock], [], [], 0.1)
       for sock in read:
