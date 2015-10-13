@@ -1,0 +1,16 @@
+Start MapReduce (Worker) on N PIs.
+Start MapReduce (Master) on 1 PI (given an input file and necessary functions).
+
+Master broadcasts for M seconds attempting to register Workers.
+Worker is in register state until registered or timed-out.
+
+Master sends (file, [worker_IP], functions) to Workers.
+Worker receives the above.
+
+Workers run map function, sending output as it goes.
+Worker informs Master that it is finished.
+
+Master informs Workers when all Workers are finished.
+Workers start running Reduce.
+
+Output of reduce is sent to Master and outputted.
