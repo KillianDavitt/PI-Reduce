@@ -14,7 +14,7 @@ REGISTER_TIMEOUT = 2
 REGISTER_MSG = "Register"
 CONFIRMATION_MSG = "Confirmation"
 
-DATA_TIMEOUT = 2
+DATA_TIMEOUT = REGISTER_TIMEOUT + 2
 
 MAP_PREFIX = "MAP_PREFIX"
 WORKERS_PREFIX = "WORKERS_PREFIX"
@@ -30,7 +30,7 @@ class Master:
 
   def __init__(self, map_path):
     self.sock = Socket(gethostbyname(gethostname()), MASTER_PORT)
-    print self.sock.getsockname()
+    print "At:", self.sock.getsockname()
 
     # Discover all Workers.
     self.sock.sendto(BROADCAST_MSG, (BROADCAST_IP, WORKER_PORT))
@@ -52,13 +52,16 @@ class Master:
     # Signal all workers to start Reduce.
 
   def RegisterWorkers(self):
-    read, _, _ = select.select([self.sock], [], [], REGISTER_TIMEOUT)
-    for sock in read:
-      data, addr = sock.recvfrom(1024)
-      if data == REGISTER_MSG:
-        print "Found worker at", addr
-        self.workers.add(addr)
-        self.sock.sendto(CONFIRMATION_MSG, addr)
+    start_time = time.time()
+    while time.time() < start_time + REGISTER_TIMEOUT:
+      read, _, _ = select.select([self.sock], [], [], 0.1)
+      for sock in read:
+        data, addr = sock.recvfrom(1024)
+        if data == REGISTER_MSG:
+          print "Found worker at", addr
+          self.workers.add(addr)
+          self.sock.sendto(CONFIRMATION_MSG, addr)
+
 
 class Worker:
 
