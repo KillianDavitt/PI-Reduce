@@ -10,11 +10,11 @@ WORKER_PORT = 3061
 
 BROADCAST_IP = "127.0.0.1"
 BROADCAST_MSG = "Broadcast"
-REGISTER_TIMEOUT = 2
+REGISTER_TIMEOUT = 1
 REGISTER_MSG = "Register"
 CONFIRMATION_MSG = "Confirmation"
 
-DATA_TIMEOUT = REGISTER_TIMEOUT + 2
+DATA_TIMEOUT = REGISTER_TIMEOUT + 1
 
 MAP_PREFIX = "MAP_PREFIX"
 WORKERS_PREFIX = "WORKERS_PREFIX"
@@ -30,7 +30,7 @@ def Socket(host, port):
 class Master:
 
   def __init__(self, map_path):
-    self.sock = Socket(gethostbyname(gethostname()), MASTER_PORT)
+    self.sock = Socket(BROADCAST_IP, MASTER_PORT)
     print "At:", self.sock.getsockname()
 
     # Discover all Workers.
