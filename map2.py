@@ -87,7 +87,9 @@ class Master:
   def RegisterWorkers(self):
     """Register any Workers that reply to broadcast within REGISTER_TIMEOUT.
     """
-    start_time = time.time()
+	master_ip = "192.168.0.25"
+    self.sock = Socket(master_ip, MASTER_PORT)
+	start_time = time.time()
     while time.time() < start_time + REGISTER_TIMEOUT:
       read, _, _ = select.select([self.sock], [], [], 0.1)
       for sock in read:
