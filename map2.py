@@ -8,7 +8,6 @@ import time
 MASTER_PORT = 8060
 WORKER_PORT = 3061
 
-BROADCAST_IP = "127.0.0.1"
 BROADCAST_MSG = "Broadcast"
 REGISTER_TIMEOUT = 1
 REGISTER_MSG = "Register"
@@ -18,6 +17,7 @@ DATA_TIMEOUT = REGISTER_TIMEOUT + 1
 
 MAP_PREFIX = "MAP_PREFIX"
 WORKERS_PREFIX = "WORKERS_PREFIX"
+LINES_PREFIX = "LINES_PREFIX"
 
 def Socket(host, port):
   sock = socket(AF_INET, SOCK_DGRAM)
@@ -29,30 +29,51 @@ def Socket(host, port):
 
 class Master:
 
-  def __init__(self, map_path):
-    self.sock = Socket(BROADCAST_IP, MASTER_PORT)
+  def __init__(self, map_f, part_f, reduce_f, lines, broadcast_ip):
+    self.sock = Socket(broadcast_ip, MASTER_PORT)
     print "At:", self.sock.getsockname()
 
-    # Discover all Workers.
-    self.sock.sendto(BROADCAST_MSG, (BROADCAST_IP, WORKER_PORT))
+    # Broadcast then register all Workers.
+    self.sock.sendto(BROADCAST_MSG, (broadcast_ip, WORKER_PORT))
     self.workers = set() # Allow no duplicates.
     self.RegisterWorkers()
     print str(len(self.workers)), "workers found."
 
-    # Read in data to send to Workers.
-    with open(map_path, "r") as f:
-      map_f = f.read()
+    amount_lines = len(lines)
+    print "amount_lines: " + str(amount_lines)
+    amount_workers = len(self.workers)
+    print "amount_workers: " + str(amount_workers)
+    lines_per_worker = amount_lines / amount_workers # TODO remainders
+    print "lines_per_worker", lines_per_worker
+    line_remainders = amount_lines % amount_workers
 
     # Send all data to Workers.
+    lines_index = 0
     for worker in self.workers:
-      self.sock.sendto(MAP_PREFIX + map_f, worker)
       self.sock.sendto(WORKERS_PREFIX + json.dumps(list(self.workers)), worker)
+      self.sock.sendto(MAP_PREFIX + map_f, worker)
+      # send partition_f
+      # send reduce_f
+      print "lines_index: " + str(lines_index)
+      lines_end_index = lines_index + lines_per_worker - 1
+      if line_remainders:
+        lines_end_index += 1
+        line_remainders -= 1
+      print "lines_end_index: " + str(lines_end_index)
+      counter = 0
+      for line in lines[lines_index:lines_end_index]:
+        self.sock.sendto(LINES_PREFIX + line, worker)
+        counter += 1
+      print "counter:", counter
+      lines_index = lines_end_index + 1
 
     # Wait for all workers to finish.
 
     # Signal all workers to start Reduce.
 
   def RegisterWorkers(self):
+    """Register any Workers that reply to broadcast within REGISTER_TIMEOUT.
+    """
     start_time = time.time()
     while time.time() < start_time + REGISTER_TIMEOUT:
       read, _, _ = select.select([self.sock], [], [], 0.1)
@@ -65,19 +86,24 @@ class Master:
 
 class Worker:
 
-  def __init__(self):
-    self.sock = Socket(BROADCAST_IP, WORKER_PORT)
+  def __init__(self, broadcast_ip):
+    self.sock = Socket(broadcast_ip, WORKER_PORT)
     print "Waiting for broadcast from Master."
 
     # Contact Master and receive confirmation.
+    self.master = None
     self.Register()
 
     # Receive all needed data from Master.
     self.map_f = None
     self.workers = None
+    self.lines = []
     self.ReceiveData()
+
     print "workers:", self.workers
     print "len(map_f):", len(self.map_f)
+    print "len(lines):", len(self.lines)
+    print self.lines
 
   def Register(self):
     registered = False
@@ -94,24 +120,20 @@ class Worker:
 
   def ReceiveData(self):
     start_time = time.time()
-    # Until all data received or timed-out.
-    while time.time() < start_time + DATA_TIMEOUT and not all([self.workers, self.map_f]):
-      read, _, _ = select.select([self.sock], [], [], 0.1)
-      for sock in read:
-        data, addr = sock.recvfrom(65535)
-        if data.startswith(MAP_PREFIX):
-          self.map_f = data[len(MAP_PREFIX):]
-        elif data.startswith(WORKERS_PREFIX):
-          self.workers = json.loads(data[len(WORKERS_PREFIX):])
+    while time.time() < start_time + DATA_TIMEOUT:
+      data, addr = sock.recvfrom(65535)
 
-if __name__ == "__main__":
-  if len(sys.argv) <= 1:
-    print "Not enough arguments."
-  elif sys.argv[1].lower() == "master":
-    print "Running as Master."
-    Master(sys.argv[2])
-  elif sys.argv[1].lower() == "worker":
-    print "Running as Worker."
-    Worker()
-  else:
-    print "Invalid options."
+      if data.startswith(MAP_PREFIX):
+        print "MAP"
+        self.map_f = data[len(MAP_PREFIX):]
+      elif data.startswith(WORKERS_PREFIX):
+        print "WORKERS"
+        self.workers = json.loads(data[len(WORKERS_PREFIX):])
+      elif data.startswith(LINES_PREFIX):
+        print "LINE"
+        self.lines.append(data[len(LINES_PREFIX):])
+
+
+
+
+

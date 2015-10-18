@@ -6,6 +6,3 @@ def map(_, line):
       count[word] = 1
     else:
       count[word] += 1
-
-def reduce(word, counts):
-  return (word, sum(counts))
