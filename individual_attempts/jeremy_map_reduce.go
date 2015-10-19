@@ -1,6 +1,7 @@
 package main
 
 import (
+  "flag"
   "fmt"
   "strconv"
 )
@@ -115,8 +116,11 @@ func MapReduce(num_mappers, num_reducers int,
 
 
 func main() {
-  num_workers := 5
-  num_reducers := 5
+  flag.Parse()
+
+  num_workers := strconv.Atoi(flag.Arg(0))
+  num_reducers := strconv.Atoi(flag.Arg(1))
+
   initial_data := make([]map[string]string, num_workers)
   for i := 0; i < len(initial_data); i++ {
     initial_data[i] = map[string]string{"Toronto": "5"}

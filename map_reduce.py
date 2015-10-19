@@ -60,6 +60,7 @@ class Master:
       sock.sendto(MAP_PREFIX + map_f, worker)
       sock.sendto(WORKERS_PREFIX + json.dumps(worker), worker)
 
+    logging.info("workers" + str(workers))
     # Send data to workers.
     pairs_per_worker = len(pairs) / len(workers)
     remainder_pairs = len(pairs) % len(workers)
@@ -71,22 +72,31 @@ class Master:
           sock = socket.create_connection(worker)
           connected = True
           logging.info("connected")
-        except socket.error:
+        except socket.error as e:
           logging.warn("Could not connect")
+          logging.info(str(e))
       end_index = start_index + pairs_per_worker
       if remainder_pairs:
         end_index += 1
         remainder_pairs -= 1
+      logging.info("about to send pairs")
       sock.send(json.dumps(pairs[start_index:end_index]))
+      logging.info("pairs")
       sock.close()
+      logging.info("closed")
 
     # Wait for workers to finish.
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    logging.info("new sock")
     sock.bind((ip, MASTER_PORT)) # Listen on (ip, MASTER_PORT)
+    logging.info("bound")
     workers_finished = 0
     while workers_finished < len(workers):
+      logging.info("while")
       data, addr = sock.recvfrom(1024)
+      logging.info("received data")
       if data == MAP_FINISHED_MSG:
+        logging.info("MAP_FINISHED_MSG")
         workers_finished += 1
         logging.info("Worker finished.")
     logging.info("Workers finished mapping!")
@@ -107,15 +117,7 @@ class Worker:
       logging.debug(data)
       if data == BROADCAST_MSG:
         logging.debug("Registering with master at " + str(addr))
-        master_addr = addr
-        sock.sendto(REGISTER_MSG, master_addr)
-        sent = True
 
-    ip = socket.gethostbyname(socket.gethostname())
-    my_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-    my_sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-    my_sock.bind((ip, WORKER_PORT)) # Listen on (broadcast_ip, WORKER_PORT)
-    logging.info("Bound to (%s, %d)", ip, WORKER_PORT)
     registered = False
     while not registered:
       data, addr = my_sock.recvfrom(1024)
