@@ -42,41 +42,50 @@ class Master:
     if not len(self.workers):
       print "Exiting"
       return
-    self.sock.close()
 
     amount_lines = len(lines)
     print "amount_lines: " + str(amount_lines)
     amount_workers = len(self.workers)
     print "amount_workers: " + str(amount_workers)
-    lines_per_worker = amount_lines / amount_workers # TODO remainders
+    lines_per_worker = amount_lines / amount_workers
     print "lines_per_worker", lines_per_worker
     line_remainders = amount_lines % amount_workers
 
+<<<<<<< HEAD:legacy/map2.py
     for worker in self.workers:
       s = socket(AF_INET, SOCK_STREAM)
       s.connect(worker)
       s.send("JIMMY")
       s.close()
 
+=======
+>>>>>>> 3f66c724f38cf7e93ab7f109ee0ff01db80bf539:map2.py
     # Send all data to Workers.
-    # lines_index = 0
-    # for worker in self.workers:
-    #   self.sock.sendto(WORKERS_PREFIX + json.dumps(list(self.workers)), worker)
-    #   self.sock.sendto(MAP_PREFIX + map_f, worker)
-    #   # send partition_f
-    #   # send reduce_f
-    #   print "lines_index: " + str(lines_index)
-    #   lines_end_index = lines_index + lines_per_worker - 1
-    #   if line_remainders:
-    #     lines_end_index += 1
-    #     line_remainders -= 1
-    #   print "lines_end_index: " + str(lines_end_index)
-    #   counter = 0
-    #   for line in lines[lines_index:lines_end_index]:
-    #     self.sock.sendto(LINES_PREFIX + line, worker)
-    #     counter += 1
-    #   print "counter:", counter
-    #   lines_index = lines_end_index + 1
+    lines_index = 0
+    for worker in self.workers:
+      self.sock.sendto(WORKERS_PREFIX + json.dumps(list(self.workers)), worker)
+      self.sock.sendto(MAP_PREFIX + map_f, worker)
+      #Instruct worker to open tcp port
+      self.sock.sendto(LINES_PREFIX, worker)
+      #Wait for worker to open port
+      time.sleep(1)
+      s = socket()
+      #Connect to worker tcp port
+      s.connect(worker)
+      print "lines_index: " + str(lines_index)
+      lines_end_index = lines_index + lines_per_worker - 1
+      if line_remainders:
+        lines_end_index += 1
+        line_remainders -= 1
+      print "lines_end_index: " + str(lines_end_index)
+      for line in lines[lines_index:lines_end_index]:
+        s.send(line)
+      #Send socket shutdown signal to Worker
+      s.shutdown(SHUT_WR)
+      s.close()
+      lines_index = lines_end_index + 1
+    # send partition_f TODO
+    # send reduce_f TODO
 
     # Wait for all workers to finish.
 
@@ -85,7 +94,9 @@ class Master:
   def RegisterWorkers(self):
     """Register any Workers that reply to broadcast within REGISTER_TIMEOUT.
     """
-    start_time = time.time()
+	master_ip = "192.168.0.25"
+    self.sock = Socket(master_ip, MASTER_PORT)
+	start_time = time.time()
     while time.time() < start_time + REGISTER_TIMEOUT:
       read, _, _ = select.select([self.sock], [], [], 0.1)
       for sock in read:
@@ -104,17 +115,20 @@ class Worker:
     # Contact Master and receive confirmation.
     self.master = None
     self.Register()
+<<<<<<< HEAD:legacy/map2.py
     self.sock.close()
     s = socket((broadcast_ip, WORKER_PORT))
     s.bind(self.master)
     s.listen(1)
     conn, addr = s.accept()
     print 'Connection address:', addr
+=======
+>>>>>>> 3f66c724f38cf7e93ab7f109ee0ff01db80bf539:map2.py
     # Receive all needed data from Master.
-    # self.map_f = None
-    # self.workers = None
-    # self.lines = []
-    # self.ReceiveData()
+    self.map_f = None
+    self.workers = None
+    self.lines = []
+    self.ReceiveData()
 
     # print "workers:", self.workers
     # print "len(map_f):", len(self.map_f)
@@ -138,7 +152,7 @@ class Worker:
   def ReceiveData(self):
     start_time = time.time()
     while time.time() < start_time + DATA_TIMEOUT:
-      data, addr = sock.recvfrom(65535)
+      data, addr = self.sock.recvfrom(65535)
 
       if data.startswith(MAP_PREFIX):
         print "MAP"
@@ -148,7 +162,23 @@ class Worker:
         self.workers = json.loads(data[len(WORKERS_PREFIX):])
       elif data.startswith(LINES_PREFIX):
         print "LINE"
-        self.lines.append(data[len(LINES_PREFIX):])
+        #Start tcp Server when 'LINE' prefix is recieved
+        s = socket(AF_INET, SOCK_STREAM)
+        #bind the port to the address of the Master but on WORKER_PORT
+        s.bind((addr[0], WORKER_PORT))
+        s.listen(4)
+        while True:
+          c, addr = s.accept()     # Establish connection with client.
+          print 'Got connection from', addr
+          print "Receiving..."
+          l = c.recv(1024)
+          while (l):
+            print "Receiving..."
+            self.lines.append(l)
+            l = c.recv(1024)
+          print "Done Receiving"
+          #Close connection to client
+          c.close()
 
 
 

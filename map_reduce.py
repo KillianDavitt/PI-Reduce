@@ -26,9 +26,14 @@ class Master:
     """
     ip = socket.gethostbyname(socket.gethostname())
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
     sock.bind((ip, MASTER_PORT)) # Listen on (ip, MASTER_PORT)
+    logging.info("Bound to (%s, %d)", ip, MASTER_PORT)
     sock.sendto(BROADCAST_MSG, (broadcast_ip, WORKER_PORT)) # Send to (broadcast_ip, WORKER_PORT)
 
+    sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
+    sock.bind((ip, MASTER_PORT)) # Listen on (ip, MASTER_PORT)
     # Register workers.
     workers = []
     start_time = time.time()
@@ -96,10 +101,8 @@ class Worker:
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
     sock.bind((broadcast_ip, WORKER_PORT)) # Listen on (broadcast_ip, WORKER_PORT)
-
-    # Register.
-    registered = False
-    while not registered:
+    sent = False
+    while not sent:
       data, addr = sock.recvfrom(1024)
       logging.debug(data)
       if data == BROADCAST_MSG:
@@ -107,8 +110,17 @@ class Worker:
         master_addr = addr
         sock.sendto(REGISTER_MSG, master_addr)
         sent = True
-      elif data == CONFIRMATION_MSG:
-        print "Registration complete"
+
+    ip = socket.gethostbyname(socket.gethostname())
+    my_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    my_sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    my_sock.bind((ip, WORKER_PORT)) # Listen on (broadcast_ip, WORKER_PORT)
+    logging.info("Bound to (%s, %d)", ip, WORKER_PORT)
+    registered = False
+    while not registered:
+      data, addr = my_sock.recvfrom(1024)
+      if data == CONFIRMATION_MSG:
+        logging.info("Registration complete")
         registered = True
 
     # Receive functions.
