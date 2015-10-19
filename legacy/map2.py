@@ -34,6 +34,7 @@ class Master:
     print "At:", self.sock.getsockname()
 
     # Broadcast then register all Workers.
+    print "Sending broadcast..... alan"
     self.sock.sendto(BROADCAST_MSG, (broadcast_ip, WORKER_PORT))
     self.workers = set() # Allow no duplicates.
     self.RegisterWorkers()
@@ -51,14 +52,11 @@ class Master:
     print "lines_per_worker", lines_per_worker
     line_remainders = amount_lines % amount_workers
 
-    s = socket(AF_INET, SOCK_STREAM)
-    s.bind((broadcast_ip, MASTER_PORT))
-    print "listening for", len(self.workers), "workers"
-    s.listen(len(self.workers))
-    conn, addr = s.accept()
-    print 'Connection address:', addr
-    data = conn.recv(1024)
-    print data
+    for worker in self.workers:
+      s = socket(AF_INET, SOCK_STREAM)
+      s.connect(worker)
+      s.send("JIMMY")
+      s.close()
 
     # Send all data to Workers.
     # lines_index = 0
@@ -106,9 +104,12 @@ class Worker:
     # Contact Master and receive confirmation.
     self.master = None
     self.Register()
-
-    s = create_connection(self.master, timeout=10)
-    s.send("JIMMY")
+    self.sock.close()
+    s = socket((broadcast_ip, WORKER_PORT))
+    s.bind(self.master)
+    s.listen(1)
+    conn, addr = s.accept()
+    print 'Connection address:', addr
     # Receive all needed data from Master.
     # self.map_f = None
     # self.workers = None
@@ -123,6 +124,7 @@ class Worker:
   def Register(self):
     registered = False
     while not registered:
+      print "Recieving!!!!"
       data, addr = self.sock.recvfrom(1024)
       if data == BROADCAST_MSG:
         print "Registering with master at", addr

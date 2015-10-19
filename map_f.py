@@ -1,8 +1,14 @@
-def map(_, line):
-  words = line.split()
-  count = {}
-  for word in words:
-    if word not in count:
-      count[word] = 1
+def map_f(_, line):
+  counts = {}
+  for word in line.split():
+    if word in counts:
+      counts[word] += 1
     else:
-      count[word] += 1
+      counts[word] = 1
+  result = []
+  for word, count in counts.iteritems():
+    result.append((word, count))
+  return result
+
+if __name__ == "__main__":
+  print map_f(None, "I am I")
