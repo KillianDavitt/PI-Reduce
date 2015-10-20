@@ -47,6 +47,7 @@ func Mergesort(items []StringTuple) []StringTuple {
 }
 
 type Mapper struct {
+  id int
   data []StringTuple
   reducer_channels []chan StringTuple
   map_f func(StringTuple) []StringTuple
@@ -54,12 +55,17 @@ type Mapper struct {
 }
 
 func (mapper *Mapper) Run() {
+
   // Map
   mapped_data := make([]StringTuple, 0)
+  tenth_index := len(mapper.data) / 10
   for i := 0; i < len(mapper.data); i++ {
     map_out := mapper.map_f(mapper.data[i])
     for j := 0; j < len(map_out); j++ {
       mapped_data = append(mapped_data, map_out[j])
+    }
+    if i % tenth_index == 0 {
+      fmt.Printf("Mapper %d: %03d%%\n", mapper.id, (i / tenth_index) * 10)
     }
   }
 
@@ -79,7 +85,7 @@ type Reducer struct {
   num_mappers int
   in_channel chan StringTuple
   main_channel chan StringTuple
-  reduce_f func([]StringTuple) []StringTuple
+  reduce_f func([]StringTuple, int) []StringTuple
 }
 
 func (reducer *Reducer) Run() {
@@ -97,7 +103,7 @@ func (reducer *Reducer) Run() {
   }
 
   // Reduce
-  data = reducer.reduce_f(data) // []StringTuple
+  data = reducer.reduce_f(data, reducer.id) // []StringTuple
 
   // Output
   for _, v := range data { // int (index), StringTuple
@@ -108,13 +114,17 @@ func (reducer *Reducer) Run() {
 
 func map_f(input StringTuple) []StringTuple {
   counts := make(map[string]int, 0)
+  invalid := []string{".", ",", "\n", "”", "“", "?", "!", ":", ";", "–"}
+  for i := 0; i < len(invalid); i++ {
+    input.s1 = strings.Replace(input.s1, invalid[i], " ", -1)
+  }
   words := strings.Split(input.s1, " ")
   for i := range words {
     word := words[i]
     value, ok := counts[word]
     if ok {
       counts[word] = value + 1
-    } else {
+    } else if len(word) > 1 {
       counts[word] = 1
     }
   }
@@ -122,37 +132,34 @@ func map_f(input StringTuple) []StringTuple {
   for i := range counts {
     result = append(result, StringTuple{i, strconv.Itoa(counts[i])})
   }
-  // fmt.Println(result)
   return result
 }
 
-func reduce_f(pairs []StringTuple) []StringTuple {
+func reduce_f(pairs []StringTuple, id int) []StringTuple {
   // Create map {word, count}.
   counts := make(map[string]string, 0) // word, "int"
+  tenth_index := len(pairs) / 10
   for i := range pairs { // for each entry in key-value pairs
     word := pairs[i].s0
     count, _ := strconv.Atoi(pairs[i].s1)
-    // fmt.Println("count in line, while reducing %d:", count)
     _, ok := counts[word]
     if ok {
       old_count, _ := strconv.Atoi(counts[word])
-      // fmt.Printf("old overall count of word %s = %d\n", word, old_count)
       counts[word] = strconv.Itoa(old_count + count)
     } else {
       counts[word] = "1"
+    }
+    if i % tenth_index == 0 {
+      fmt.Printf("Reducer %d: %03d%%\n", id, (i / tenth_index) * 10)
     }
   }
 
   // Convert to []StringTuple.
   result := make([]StringTuple, 0) // [{string, string}]
   for word := range counts {
-    // fmt.Printf("%s %s\n", word, counts[word])
     tuple := StringTuple{word, counts[word]}
     result = append(result, tuple)
   }
-  // fmt.Println(counts["he"])
-  // fmt.Println(result)
-  fmt.Println(len(result))
   return result
 }
 
@@ -162,7 +169,6 @@ func dist_f(input StringTuple, num_Workers int) int {
   for i := range hash {
     sum += int(hash[i])
   }// return hash % num_Workers
-  // fmt.Println("sum%s", sum)
   return sum % num_Workers
 }
 
@@ -174,11 +180,11 @@ func Stoba(s string) []byte {
   return ba
 }
 
-func MapReduce(num_mappers, num_reducers int,
+func MapReduce(num_mappers, num_reducers, lines_to_print int,
                initial_data [][]StringTuple,
                map_f func(StringTuple) []StringTuple,
                dist_f func(StringTuple, int) int,
-               reduce_f func([]StringTuple) []StringTuple) {
+               reduce_f func([]StringTuple, int) []StringTuple) {
 
   // Input channel for each Reducer.
   reducer_channels := make([]chan StringTuple, num_reducers)
@@ -189,7 +195,7 @@ func MapReduce(num_mappers, num_reducers int,
   // Mappers.
   mappers := make([]Mapper, num_mappers)
   for i := 0; i < num_mappers; i++ {
-    mappers[i] = Mapper{initial_data[i], reducer_channels, map_f, dist_f}
+    mappers[i] = Mapper{i, initial_data[i], reducer_channels, map_f, dist_f}
     go mappers[i].Run()
   }
 
@@ -212,17 +218,21 @@ func MapReduce(num_mappers, num_reducers int,
       finished_reducers += 1
     } else {
       result = append(result, s)
-      // fmt.Printf("%s, %s\n", s.s0, s.s1)
     }
   }
   result = Mergesort(result)
-  fmt.Println(result)
+  fmt.Printf("\n%d most occuring words:\n", lines_to_print)
+  for i := len(result) - 1; i > len(result) - 1 - lines_to_print; i-- {
+    amount, _ := strconv.Atoi(result[i].s1)
+    fmt.Printf("%05d\t%s\n", amount, result[i].s0)
+  }
 }
 
 func main() {
 
   num_workers, _ := strconv.Atoi(os.Args[1])
   num_reducers, _ := strconv.Atoi(os.Args[2])
+  lines_to_print, _ := strconv.Atoi(os.Args[4])
 
   file, _ := ioutil.ReadFile(os.Args[3])
   lines := strings.Split(string(file), "\n")
@@ -249,5 +259,5 @@ func main() {
   }
 
 
-  MapReduce(num_workers, num_reducers, data, map_f, dist_f, reduce_f)
+  MapReduce(num_workers, num_reducers, lines_to_print, data, map_f, dist_f, reduce_f)
 }
