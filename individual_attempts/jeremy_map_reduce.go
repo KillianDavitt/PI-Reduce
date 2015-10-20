@@ -16,20 +16,34 @@ type StringTuple struct {
   s1 string
 }
 
-func bubbleSort(tosort []StringTuple) {
-  size := len(tosort)
-  if size < 2 {
-    return
-  }
-  for i := 0; i < size; i++ {
-    for j := size - 1; j >= i+1; j-- {
-      val_j, _ := strconv.Atoi(tosort[j].s1)
-      val_j_1, _ := strconv.Atoi(tosort[j-1].s1)
-      if val_j < val_j_1 {
-        tosort[j], tosort[j-1] = tosort[j-1], tosort[j]
-      }
+func merge(a []StringTuple, b []StringTuple) []StringTuple {
+  var r = make([]StringTuple, len(a) + len(b))
+  var i = 0
+  var j = 0
+  for i < len(a) && j < len(b) {
+    val_ai, _ := strconv.Atoi(a[i].s1)
+    val_bj, _ := strconv.Atoi(b[j].s1)
+    if val_ai <= val_bj {
+      r[i+j] = a[i]
+      i++
+    } else {
+      r[i+j] = b[j]
+      j++
     }
   }
+  for i < len(a) { r[i+j] = a[i]; i++ }
+  for j < len(b) { r[i+j] = b[j]; j++ }
+  return r
+}
+
+func Mergesort(items []StringTuple) []StringTuple {
+  if len(items) < 2 {
+    return items
+  }
+  var middle = len(items) / 2
+  var a = Mergesort(items[:middle])
+  var b = Mergesort(items[middle:])
+  return merge(a, b)
 }
 
 type Mapper struct {
@@ -40,8 +54,6 @@ type Mapper struct {
 }
 
 func (mapper *Mapper) Run() {
-  fmt.Println("length of initial data on one worker %d: ", len(mapper.data))
-  // fmt.Println(mapper.data)
   // Map
   mapped_data := make([]StringTuple, 0)
   for i := 0; i < len(mapper.data); i++ {
@@ -50,7 +62,7 @@ func (mapper *Mapper) Run() {
       mapped_data = append(mapped_data, map_out[j])
     }
   }
-  fmt.Println("length of mapped data on one worker %d: ", len(mapped_data))
+
   // Shuffle
   for i := range mapped_data {
     tuple := mapped_data[i]
@@ -83,11 +95,9 @@ func (reducer *Reducer) Run() {
       data = append(data, s)
     }
   }
-  // fmt.Println("length of reducer initial data on one reducer %d :", len(data))
+
   // Reduce
-  // fmt.Println(data)
   data = reducer.reduce_f(data) // []StringTuple
-  // fmt.Println(data)
 
   // Output
   for _, v := range data { // int (index), StringTuple
@@ -117,6 +127,7 @@ func map_f(input StringTuple) []StringTuple {
 }
 
 func reduce_f(pairs []StringTuple) []StringTuple {
+  // Create map {word, count}.
   counts := make(map[string]string, 0) // word, "int"
   for i := range pairs { // for each entry in key-value pairs
     word := pairs[i].s0
@@ -131,13 +142,13 @@ func reduce_f(pairs []StringTuple) []StringTuple {
       counts[word] = "1"
     }
   }
-  // fmt.Println(counts)
+
+  // Convert to []StringTuple.
   result := make([]StringTuple, 0) // [{string, string}]
   for word := range counts {
     // fmt.Printf("%s %s\n", word, counts[word])
     tuple := StringTuple{word, counts[word]}
     result = append(result, tuple)
-    fmt.Println("single word final result = {%s, %s}", tuple.s0, tuple.s1)
   }
   // fmt.Println(counts["he"])
   // fmt.Println(result)
@@ -204,7 +215,7 @@ func MapReduce(num_mappers, num_reducers int,
       // fmt.Printf("%s, %s\n", s.s0, s.s1)
     }
   }
-  bubbleSort(result)
+  result = Mergesort(result)
   fmt.Println(result)
 }
 
@@ -219,7 +230,7 @@ func main() {
   for i := 0; i < len(lines); i++ {
     pairs[i] = StringTuple{strconv.Itoa(i), lines[i]}
   }
-
+  // TODO PRint percentages across the screen
   data := make([][]StringTuple, num_workers)
   pairs_per_worker := len(pairs) / num_workers
   remaining_pairs := len(pairs) % num_workers
